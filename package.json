@@ -23,7 +23,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tesseract.js": "^6.0.1",
-    "zod": "^3.24.2"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -41,6 +41,10 @@
     "typescript": "^5.7.2",
     "vite": "^6.4.6",
     "vite-plugin-pwa": "^0.21.1",
-    "vitest": "^3.2.6"
+    "vitest": "^5.1.2"
+  },
+  "overrides": {
+    "glob": "^14.0.2",
+    "minimatch": "^11.0.1"
   }
 }
