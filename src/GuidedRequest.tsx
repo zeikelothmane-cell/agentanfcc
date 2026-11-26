@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from './session'
 import type { Client } from './types'
 
 const portal = 'https://www.ancfcc.gov.ma/certificatspage/'
 type Title = { office: string; number: string; index: string; special: string }
+type Saved = {id:string;client_id:string;last_ar:string;first_ar:string;address:string;email:string;titles:Title[];step:number;cpp:string;updated_at:string}
 const emptyTitle = (): Title => ({office:'FES ZOUAGHA',number:'',index:'69',special:''})
 const steps = ['Préparer le formulaire','Vérifier les titres sur le portail','Valider le téléphone sur le portail','Payer sur la page bancaire','Conserver le reçu et le CPP','Attendre le SMS de disponibilité','Suivre et télécharger le certificat']
 export default function GuidedRequest({clients}:{clients:Client[]}) {
@@ -14,13 +16,38 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
  const [titles,setTitles]=useState<Title[]>([emptyTitle()])
  const [step,setStep]=useState(0)
  const [cpp,setCpp]=useState('')
+ const [saved,setSaved]=useState<Saved[]>([])
+ const [id,setId]=useState('')
+ const [busy,setBusy]=useState(false)
+ const [message,setMessage]=useState('')
+ async function load() {
+  if(!supabase)return
+  const {data,error}=await supabase.from('guided_cases').select('*').order('updated_at',{ascending:false})
+  if(error){setMessage('Lecture impossible');return}
+  setSaved((data||[]) as Saved[])
+ }
+ useEffect(()=>{void load()},[])
+ function openCase(d:Saved){setId(d.id);setClientId(d.client_id);setLastAr(d.last_ar);setFirstAr(d.first_ar);setAddress(d.address);setEmail(d.email);setTitles(d.titles.length?d.titles:[emptyTitle()]);setStep(d.step);setCpp(d.cpp);setMessage('Dossier chargé')}
+ function reset(){setId('');setClientId('');setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setStep(0);setCpp('');setMessage('Nouveau dossier')}
+ async function save(){
+  if(!supabase||!clientId||busy)return
+  setBusy(true);setMessage('')
+  try{
+   const payload={client_id:clientId,last_ar:lastAr,first_ar:firstAr,address,email,titles,step,cpp,updated_at:new Date().toISOString()}
+   const result=id?await supabase.from('guided_cases').update(payload).eq('id',id).select().single():await supabase.from('guided_cases').insert(payload).select().single()
+   if(result.error)throw result.error
+   setId(result.data.id);await load();setMessage('Dossier enregistré')
+  }catch{setMessage('Échec de la sauvegarde. Réessayez.')}finally{setBusy(false)}
+ }
  const client=clients.find(c=>c.id===clientId)
  const change=(i:number,key:keyof Title,value:string)=>setTitles(old=>old.map((t,j)=>i===j?{...t,[key]:value}:t))
  return <section className="space-y-5">
  <h1 className="text-2xl font-bold text-forest">Assistant ANCFCC — parcours guidé</h1>
- <p className="rounded-xl bg-amber-50 p-4 text-sm">Mode manuel assisté. Aucun envoi automatique, aucun paiement ni code SMS collecté. Les données complémentaires de cet écran ne sont pas enregistrées : elles disparaissent à la fermeture.</p>
+ <p className="rounded-xl bg-amber-50 p-4 text-sm">Mode manuel assisté. Aucun envoi automatique, aucun paiement ni code SMS collecté. Enregistrez votre dossier avant de quitter. Les étapes sont déclaratives et non vérifiées par le portail.</p>
  <div className="space-y-3 rounded-2xl bg-white p-5">
- <label>Client<select className="input" value={clientId} onChange={e=>{setClientId(e.target.value);setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setCpp('');setStep(0)}}><option value="">Choisir un client</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></label>
+ <button disabled={busy} onClick={reset} className="rounded-lg border p-2">Nouveau dossier</button>
+ <label>Dossiers enregistrés<select disabled={busy} className="input" value={id} onChange={e=>{const d=saved.find(x=>x.id===e.target.value);if(d)openCase(d);else reset()}}><option value="">Nouveau dossier</option>{saved.map(d=><option key={d.id} value={d.id}>{clients.find(c=>c.id===d.client_id)?.lastName||'Client'} · {d.titles.map(t=>t.number+'/'+t.index).join(', ')} · {new Date(d.updated_at).toLocaleDateString()}</option>)}</select></label>
+ <label>Client<select className="input" value={clientId} onChange={e=>{setId('');setClientId(e.target.value);setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setCpp('');setStep(0)}}><option value="">Choisir un client</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></label>
  {client&&<p>Nom : {client.lastName} · Prénom : {client.firstName} · CIN : {client.cin}</p>}
  <label>Nom en arabe<input className="input" dir="rtl" value={lastAr} onChange={e=>setLastAr(e.target.value)}/></label>
  <label>Prénom en arabe<input className="input" dir="rtl" value={firstAr} onChange={e=>setFirstAr(e.target.value)}/></label>
@@ -41,7 +68,9 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
  </div>
  <div className="space-y-3 rounded-2xl bg-white p-5"><h2 className="font-bold">Checklist manuelle (non vérifiée par ANCFCC)</h2>
  {steps.map((s,i)=><label key={s} className="flex items-center gap-3"><input type="checkbox" checked={i<step} disabled={i>step} onChange={()=>setStep(i<step?i:i+1)}/>{s}</label>)}
- <label>Code de suivi CPP (temporaire)<input className="input" value={cpp} onChange={e=>setCpp(e.target.value)} autoComplete="off"/></label>
+ <label>Code de suivi CPP<input className="input" value={cpp} onChange={e=>setCpp(e.target.value)} autoComplete="off"/></label>
  <a href="https://www.ancfcc.gov.ma/" target="_blank" rel="noopener noreferrer" className="block text-forest underline">Portail officiel — rubrique Suivre</a>
+ <button disabled={busy||!clientId} onClick={save} className="w-full rounded-xl bg-forest p-3 text-white disabled:opacity-50">{busy?'Enregistrement…':'Enregistrer le dossier'}</button>
+ <p role="status">{message}</p>
  </div></section>
 }
