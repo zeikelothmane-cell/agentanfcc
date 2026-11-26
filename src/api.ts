@@ -33,11 +33,11 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       }).then((r) => r.demand),
-    validateSms: (id: string, code = '') =>
+    validateSms: (id: string, _code = '') =>
       fetchJson<{ demand: Demand }>(`/api/demands/${id}/sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
+        body: JSON.stringify({})
       }).then((r) => r.demand),
     confirmPayment: (id: string) =>
       fetchJson<{ demand: Demand }>(`/api/demands/${id}/payment`, { method: 'POST' }).then((r) => r.demand)
