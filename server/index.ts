@@ -5,105 +5,33 @@ import helmet from 'helmet'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
-import { createInMemoryStore } from './store.js'
+import { authenticate } from './security.js'
 import { createAutomationAdapter } from './automation.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
-const store = createInMemoryStore()
-const automation = createAutomationAdapter(process.env.ANCFCC_AUTOMATION_MODE || 'simulation')
+
+const automation = createAutomationAdapter('simulation')
 
 app.use(helmet({ contentSecurityPolicy: false }))
-app.use(cors())
+app.use(cors({origin:false}))
 app.use(express.json({ limit: '2mb' }))
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, mode: automation.mode })
 })
 
-app.get('/api/clients', (_req, res) => {
-  res.json({ clients: store.listClients() })
-})
-
-const clientSchema = z.object({
-  firstName: z.string().trim().min(1).max(100),
-  lastName: z.string().trim().min(1).max(100),
-  cin: z.string().trim().max(30).default(''),
-  phone: z.string().trim().max(30).default(''),
-  landTitle: z.string().trim().max(100).default('')
-})
-
-app.post('/api/clients', (req, res) => {
-  const parsed = clientSchema.safeParse(req.body)
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.issues[0]?.message || 'Données invalides' })
-    return
-  }
-  const client = store.createClient(parsed.data)
-  res.status(201).json({ client })
-})
-
-app.get('/api/demands', (_req, res) => {
-  res.json({ demands: store.listDemands() })
-})
-
-const demandSchema = z.object({
-  clientId: z.string().min(1),
-  landTitle: z.string().trim().min(1).max(100),
-  ancfccFee: z.number().nonnegative(),
-  serviceFee: z.number().nonnegative()
-})
-
-app.post('/api/demands', (req, res) => {
-  const parsed = demandSchema.safeParse(req.body)
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.issues[0]?.message || 'Données invalides' })
-    return
-  }
-  const existing = store.findActiveDuplicate(parsed.data.clientId, parsed.data.landTitle)
-  if (existing) {
-    res.status(409).json({ error: 'Une demande active existe déjà pour ce client et ce titre foncier.', demand: existing })
-    return
-  }
-  const client = store.findClient(parsed.data.clientId)
-  if (!client) {
-    res.status(404).json({ error: 'Client introuvable' })
-    return
-  }
-  const demand = store.createDemand({ ...parsed.data, clientName: `${client.firstName} ${client.lastName}` })
-  res.status(201).json({ demand })
-  void automation.start(demand.id).then(() => {
-    store.advanceDemand(demand.id)
-  })
-})
-
-app.post('/api/demands/:id/sms', (req, res) => {
-  const smsSchema = z.object({
-    code: z.string().regex(/^\d{4,8}$/)
-  })
-  const parsed = smsSchema.safeParse(req.body)
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Code SMS invalide' })
-    return
-  }
-  const demand = store.validateSms(req.params.id)
-  if (!demand) {
-    res.status(409).json({ error: 'La demande n’attend pas de validation SMS' })
-    return
-  }
-  void automation.resume(req.params.id, 'sms')
-  res.json({ demand })
-})
-
-app.post('/api/demands/:id/payment', (req, res) => {
-  const demand = store.confirmPayment(req.params.id)
-  if (!demand) {
-    res.status(409).json({ error: 'La validation SMS doit précéder la confirmation de paiement' })
-    return
-  }
-  void automation.resume(req.params.id, 'payment')
-  res.json({ demand })
-})
+app.use('/api', authenticate, (_req,res,next)=>{res.set('Cache-Control','no-store');next()})
+const clientSchema = z.object({firstName:z.string().trim().min(1).max(100),lastName:z.string().trim().min(1).max(100),cin:z.string().trim().max(30).default(''),phone:z.string().trim().max(30).default(''),landTitle:z.string().trim().max(100).default('')})
+const demandSchema=z.object({clientId:z.string().uuid(),landTitle:z.string().trim().min(1).max(100),ancfccFee:z.number().nonnegative().max(100000),serviceFee:z.number().nonnegative().max(100000)})
+const clientView=(c:any)=>({id:c.id,firstName:c.first_name,lastName:c.last_name,cin:c.cin||'',phone:c.phone||'',landTitle:c.land_title||'',createdAt:c.created_at,requests:0})
+const demandView=(d:any)=>({id:d.id,clientId:d.client_id,clientName:[d.clients?.first_name,d.clients?.last_name].filter(Boolean).join(' '),landTitle:d.land_title,status:({draft:'brouillon',in_progress:'en_cours',sms_required:'code_sms',payment_confirmation:'confirmation_paiement',completed:'terminee',error:'erreur'} as Record<string,string>)[d.status],ancfccFee:Number(d.ancfcc_fee),serviceFee:Number(d.service_fee),createdAt:d.created_at,updatedAt:d.updated_at,history:[],paymentConfirmed:false})
+app.get('/api/clients',async(_req,res)=>{try{const {data,error}=await res.locals.db.from('clients').select('*').order('created_at',{ascending:false});if(error)throw error;res.json({clients:data.map(clientView)})}catch{res.status(500).json({error:'Lecture impossible'})}})
+app.post('/api/clients',async(req,res)=>{const p=clientSchema.safeParse(req.body);if(!p.success){res.status(400).json({error:'Données invalides'});return}try{const c=p.data;const {data,error}=await res.locals.db.from('clients').insert({owner_id:res.locals.owner,first_name:c.firstName,last_name:c.lastName,cin:c.cin,phone:c.phone,land_title:c.landTitle}).select().single();if(error)throw error;res.status(201).json({client:clientView(data)})}catch{res.status(500).json({error:'Création impossible'})}})
+app.get('/api/demands',async(_req,res)=>{try{const {data,error}=await res.locals.db.from('demands').select('*,clients(first_name,last_name)').order('created_at',{ascending:false});if(error)throw error;res.json({demands:data.map(demandView)})}catch{res.status(500).json({error:'Lecture impossible'})}})
+app.post('/api/demands',async(req,res)=>{const p=demandSchema.safeParse(req.body);if(!p.success){res.status(400).json({error:'Données invalides'});return}try{const d=p.data;const {data,error}=await res.locals.db.from('demands').insert({id:crypto.randomUUID(),owner_id:res.locals.owner,client_id:d.clientId,land_title:d.landTitle,status:'sms_required',ancfcc_fee:d.ancfccFee,service_fee:d.serviceFee}).select('*,clients(first_name,last_name)').single();if(error){res.status(error.code==='23505'?409:400).json({error:'Demande refusée'});return}res.status(201).json({demand:demandView(data)})}catch{res.status(500).json({error:'Création impossible'})}})
+app.post('/api/demands/:id/sms',(_req,res)=>{res.status(409).json({error:'Validation désactivée pendant la sécurisation V2. Ne saisissez aucun code réel.'})})
+app.post('/api/demands/:id/payment',(_req,res)=>{res.status(409).json({error:'Paiement désactivé pendant la sécurisation V2.'})})
 
 if (process.env.NODE_ENV === 'production') {
   const dirname = path.dirname(fileURLToPath(import.meta.url))
