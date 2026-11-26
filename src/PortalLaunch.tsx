@@ -36,7 +36,7 @@ export default function PortalLaunch({ draft }: { draft: Draft }) {
     setNotice('Dans le nouvel onglet, touchez le favori « Remplir ANCFCC ».')
   }
   return <div className="space-y-3">
-    <details><summary>Installer le favori « Remplir ANCFCC » dans Safari</summary>
+    <details><summary>Installer le favori « Remplir ANCFCC » dans votre navigateur</summary>
       <p>Une seule fois, ajoutez cette page aux favoris. Modifiez ce favori, nommez-le « Remplir ANCFCC » et remplacez son adresse par le code copié ci-dessous.</p>
       <button type="button" className="rounded-lg border p-2" onClick={async () => {
         try { await navigator.clipboard.writeText(favourite); setNotice('Adresse du favori copiée.') }

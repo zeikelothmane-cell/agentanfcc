@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      workbox: { globIgnores: ['**/ocr/**','**/node_modules/**/*','sw.js','workbox-*.js'] },
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {

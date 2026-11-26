@@ -10,6 +10,9 @@ export interface Client {
   id: string
   firstName: string
   lastName: string
+  firstAr?: string
+  lastAr?: string
+  address?: string
   cin: string
   phone: string
   landTitle: string

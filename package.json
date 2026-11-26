@@ -11,10 +11,15 @@
     "start": "NODE_ENV=production tsx server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "prebuild": "node scripts/prepare-ocr.mjs",
+    "predev": "node scripts/prepare-ocr.mjs",
+    "predev:web": "node scripts/prepare-ocr.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
+    "@tesseract.js-data/ara": "1.0.0",
+    "@tesseract.js-data/fra": "1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",

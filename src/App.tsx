@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   BarChart3, Bell, ChevronRight, Download, FileText, FolderOpen, LayoutDashboard,
   Menu, Plus, Printer, Search, Settings, Share2, ShieldCheck, Smartphone, Upload,
-  Users, WalletCards, X, Camera, CheckCircle2, Clock3, AlertCircle
+  Users, WalletCards, X, CheckCircle2, AlertCircle
 } from 'lucide-react'
-import { createWorker } from 'tesseract.js'
+import IdentityEntry, { emptyIdentity, arabicValues, type Identity } from './IdentityEntry'
 import { api } from './api'
-import { readIdentity } from './identity'
 import GuidedRequest from './GuidedRequest'
 import type { Client, Demand, RequestStatus } from './types'
 
@@ -337,37 +336,13 @@ function Modal({ title, children, onClose, wide = false }: { title: string; chil
 }
 
 function ClientModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => Promise<void> }) {
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [cin, setCin] = useState('')
+  const [identity,setIdentity]=useState<Identity>(emptyIdentity)
+  const {first:firstName,last:lastName,cin,address}=identity
   const [phone, setPhone] = useState('')
   const [landTitle, setLandTitle] = useState('')
-  const [front, setFront] = useState<File | null>(null)
-  const [back, setBack] = useState<File | null>(null)
-  const [ocrText, setOcrText] = useState('')
   const [ocrLoading, setOcrLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  async function scanDocument(file: File, side: 'front' | 'back') {
-    if (side === 'front') setFront(file); else setBack(file)
-    setOcrLoading(true)
-    setError('')
-    try {
-      const worker = await createWorker(['fra', 'ara'])
-      const result = await worker.recognize(file).finally(()=>worker.terminate())
-      const raw = result.data.text
-      const fields = readIdentity(raw)
-      if(fields.cin)setCin(old=>old||fields.cin)
-      if(fields.first)setFirstName(old=>old||fields.first)
-      if(fields.last)setLastName(old=>old||fields.last)
-      setOcrText((text) => `${text}${text ? '\n' : ''}${result.data.text}`)
-    } catch (err) {
-      setError('OCR indisponible. Vous pouvez saisir les informations manuellement.')
-    } finally {
-      setOcrLoading(false)
-    }
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -378,7 +353,7 @@ function ClientModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setSaving(true)
     setError('')
     try {
-      await api.clients.create({ firstName: firstName.trim(), lastName: lastName.trim(), cin: cin.trim(), phone: phone.trim(), landTitle: landTitle.trim() })
+      await api.clients.create({ firstName: firstName.trim(), lastName: lastName.trim(), ...arabicValues(identity),address, cin: cin.trim(), phone: phone.trim(), landTitle: landTitle.trim() })
       await onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Impossible de créer le client')
@@ -391,28 +366,10 @@ function ClientModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     <Modal title="Créer une fiche client" onClose={onClose} wide>
       <form onSubmit={submit} className="p-6">
         {error && <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-700">Informations personnelles</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Prénom"><input value={firstName} onChange={(e) => setFirstName(e.target.value)} className="input" /></Field>
-              <Field label="Nom"><input value={lastName} onChange={(e) => setLastName(e.target.value)} className="input" /></Field>
-            </div>
-            <Field label="Numéro CIN"><input value={cin} onChange={(e) => setCin(e.target.value)} className="input" /></Field>
-            <Field label="Téléphone"><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="input" placeholder="+212 ..." /></Field>
-            <Field label="Titre foncier"><input value={landTitle} onChange={(e) => setLandTitle(e.target.value)} className="input" /></Field>
-          </div>
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-700">Scan de la CIN</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <ScanBox label="Recto" file={front} onFile={(file) => scanDocument(file, 'front')} />
-              <ScanBox label="Verso" file={back} onFile={(file) => scanDocument(file, 'back')} />
-            </div>
-            {ocrLoading && <p className="flex items-center gap-2 text-sm text-slate-500"><Clock3 size={16} className="animate-spin" /> Extraction OCR en cours...</p>}
-            <Field label="Texte OCR français / arabe — vérifier toutes les suggestions">
-              <textarea value={ocrText} onChange={(e) => setOcrText(e.target.value)} rows={5} dir="auto" className="input resize-none" placeholder="Les informations détectées apparaîtront ici..." />
-            </Field>
-          </div>
+        <IdentityEntry value={identity} update={setIdentity} onScan={setOcrLoading} busy={ocrLoading||saving}/>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Téléphone"><input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} className="input" /></Field>
+          <Field label="Titre foncier"><input value={landTitle} onChange={e=>setLandTitle(e.target.value)} className="input" /></Field>
         </div>
         <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
           <button type="button" onClick={onClose} className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600">Annuler</button>
@@ -420,15 +377,6 @@ function ClientModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </div>
       </form>
     </Modal>
-  )
-}
-
-function ScanBox({ label, file, onFile }: { label: string; file: File | null; onFile: (file: File) => void }) {
-  return (
-    <label className="grid aspect-[4/3] cursor-pointer place-items-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-center hover:border-gold">
-      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
-      {file ? <div><CheckCircle2 className="mx-auto text-emerald-600" size={24} /><p className="mt-2 text-xs font-medium text-slate-600">{label} capturé</p></div> : <div><Camera className="mx-auto text-slate-400" size={24} /><p className="mt-2 text-xs font-medium text-slate-600">Scanner {label}</p></div>}
-    </label>
   )
 }
 
