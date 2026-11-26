@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './session'
 import type { Client } from './types'
 
+import { officeIndices } from './conservations'
 import PortalLaunch from './PortalLaunch'
 type Title = { office: string; number: string; index: string; special: string }
 type Saved = {last_fr:string|null;first_fr:string|null;identity_number:string|null;id:string;client_id:string;last_ar:string;first_ar:string;address:string;email:string;titles:Title[];step:number;cpp:string;updated_at:string}
@@ -61,15 +62,24 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
  <label>Email<input className="input" type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
  </div>
  <div className="space-y-4 rounded-2xl bg-white p-5"><h2 className="font-bold">Titres fonciers</h2>
- {titles.map((t,i)=><div key={i} className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2">
- <label>Conservation<input className="input" value={t.office} onChange={e=>{change(i,'office',e.target.value);change(i,'index','')}}/></label>
+ {titles.map((t,i)=>{
+ const indices=Object.hasOwn(officeIndices,t.office)?officeIndices[t.office]:[]
+ return <div key={i} className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2">
+ <label>Conservation foncière<select className="input" value={t.office} onChange={e=>{const office=e.target.value;setTitles(old=>old.map((row,j)=>j===i?{...row,office,index:'',special:''}:row))}}>
+   <option value="">Choisir une conservation</option>
+   {t.office&&!Object.hasOwn(officeIndices,t.office)&&<option value={t.office}>{t.office} (valeur enregistrée)</option>}
+   {Object.keys(officeIndices).map(name=><option key={name}>{name}</option>)}
+ </select></label>
  <label>Numéro<input className="input" inputMode="numeric" value={t.number} onChange={e=>change(i,'number',e.target.value.replace(/[^0-9]/g,''))}/></label>
- <label>Indice{t.office==='FES ZOUAGHA'?<select className="input" value={t.index} onChange={e=>change(i,'index',e.target.value)}>{['','07','69','F','K','KF'].map(v=><option key={v}>{v}</option>)}</select>:<input className="input" value={t.index} onChange={e=>change(i,'index',e.target.value)}/>}</label>
+ <label>Indice<select className="input" value={t.index} disabled={!t.office} onChange={e=>change(i,'index',e.target.value)}>
+   <option value="">{t.office?'Choisir un indice':'Choisir d’abord la conservation'}</option>
+   {t.index&&!indices.includes(t.index)&&<option value={t.index}>{t.index} (valeur enregistrée)</option>}
+   {indices.map(value=><option key={value}>{value}</option>)}
+ </select></label>
  <label>Indice spécial<select className="input" value={t.special} onChange={e=>change(i,'special',e.target.value)}><option value="">Aucun</option><option>BIS</option><option>TER</option></select></label>
  {titles.length>1&&<button type="button" onClick={()=>setTitles(old=>old.filter((_,j)=>j!==i))}>Retirer ce titre</button>}
- </div>)}
+ </div>})}
  <button className="rounded-lg border p-3" onClick={()=>setTitles(old=>[...old,emptyTitle()])}>+ Ajouter un titre</button>
- <p className="text-xs text-slate-500">Indices FES ZOUAGHA relevés sur le portail. Pour les autres conservations, vérifier les valeurs officielles.</p>
  <PortalLaunch draft={{fields:{TextBoxNom:identity.last,TextBoxPrenom:identity.first,TextBoxIdentifiant:identity.cin,TextBoxNomAr:lastAr,TextBoxPrenomAr:firstAr,TextBoxAdresse:address,TextBoxEmail:email},titles}}/>
  <a href="https://www.ancfcc.gov.ma/certificatspage/" target="_blank" rel="noopener noreferrer" className="underline">Ouvrir le portail en saisie manuelle</a>
  </div>
