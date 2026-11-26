@@ -273,13 +273,16 @@ function FinanceSection({ demands }: { demands: Demand[] }) {
   const totalService = demands.reduce((n, d) => n + d.serviceFee, 0)
   const paid = demands.filter((d) => d.paymentConfirmed).reduce((n, d) => n + d.ancfccFee + d.serviceFee, 0)
   function exportExcel() {
-    import('xlsx').then(({ utils, writeFile }) => {
-      const rows = demands.map((d) => ({ Demande: d.id, Client: d.clientName, 'Titre foncier': d.landTitle, 'Frais ANCFCC': d.ancfccFee, 'Frais de service': d.serviceFee, 'Montant payé': d.ancfccFee + d.serviceFee, Statut: statusLabels[d.status] }))
-      const sheet = utils.json_to_sheet(rows)
-      const book = utils.book_new()
-      utils.book_append_sheet(book, sheet, 'Demandes')
-      writeFile(book, 'ancfcc-finances.xlsx')
-    })
+    const safe = (v: string | number) => {
+      const s = String(v)
+      return '"' + (/^[\s]*[=+@-]/.test(s) || /^[\t\r\n]/.test(s) ? "'" + s : s).replace(/"/g, '""') + '"'
+    }
+    const rows = [['Demande','Client','Titre foncier','Frais ANCFCC','Frais de service','Montant payé','Statut'], ...demands.map(d => [d.id,d.clientName,d.landTitle,d.ancfccFee,d.serviceFee,d.paymentConfirmed ? d.ancfccFee+d.serviceFee : 0,statusLabels[d.status]])]
+    const blob = new Blob(['\uFEFF'+rows.map(r=>r.map(safe).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href=url; a.download='ancfcc-finances.csv'; a.click()
+    setTimeout(()=>URL.revokeObjectURL(url),1000)
   }
   return (
     <div>
