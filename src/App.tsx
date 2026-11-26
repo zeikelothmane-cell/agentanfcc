@@ -146,7 +146,7 @@ function App() {
       {demandModal && <DemandModal clients={clients} onClose={() => setDemandModal(false)} onCreated={async (demand) => {
         setDemandModal(false)
         await refresh()
-        if (demand.status === 'code_sms') setSmsModal(demand)
+        setSection('guided')
       }} />}
       {smsModal && <SmsModal demand={smsModal} onClose={() => setSmsModal(null)} onValidate={validateSms} />}
       {paymentModal && <PaymentModal demand={paymentModal} onClose={() => setPaymentModal(null)} onConfirm={() => confirmPayment(paymentModal)} />}
@@ -354,8 +354,14 @@ function ClientModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setError('')
     try {
       const worker = await createWorker(['fra', 'ara'])
-      const result = await worker.recognize(file)
-      await worker.terminate()
+      const result = await worker.recognize(file).finally(()=>worker.terminate())
+      const raw = result.data.text
+      const candidate = raw.match(/\b[A-Z]{1,2}\s*\d{5,8}\b/g)
+      if(candidate?.length===1) setCin(old=>old||candidate[0].replace(/\s/g,''))
+      const first = raw.match(/(?:Prénom|Prenom)\s*[:：]\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ '’-]+)(?=\n|$)/i)?.[1]?.trim()
+      const last = raw.match(/(?:^|\n)Nom\s*[:：]\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ '’-]+)(?=\n|$)/i)?.[1]?.trim()
+      if(first)setFirstName(old=>old||first)
+      if(last)setLastName(old=>old||last)
       setOcrText((text) => `${text}${text ? '\n' : ''}${result.data.text}`)
     } catch (err) {
       setError('OCR indisponible. Vous pouvez saisir les informations manuellement.')
@@ -404,14 +410,14 @@ function ClientModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               <ScanBox label="Verso" file={back} onFile={(file) => scanDocument(file, 'back')} />
             </div>
             {ocrLoading && <p className="flex items-center gap-2 text-sm text-slate-500"><Clock3 size={16} className="animate-spin" /> Extraction OCR en cours...</p>}
-            <Field label="Texte OCR — vérification manuelle">
+            <Field label="Texte OCR français / arabe — vérifier toutes les suggestions">
               <textarea value={ocrText} onChange={(e) => setOcrText(e.target.value)} rows={5} dir="auto" className="input resize-none" placeholder="Les informations détectées apparaîtront ici..." />
             </Field>
           </div>
         </div>
         <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
           <button type="button" onClick={onClose} className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600">Annuler</button>
-          <button type="submit" disabled={saving} className="h-11 rounded-xl bg-forest px-5 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Création...' : 'Créer le client'}</button>
+          <button type="submit" disabled={saving || ocrLoading} className="h-11 rounded-xl bg-forest px-5 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Création...' : 'Créer le client'}</button>
         </div>
       </form>
     </Modal>
