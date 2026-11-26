@@ -14,7 +14,7 @@ const port = Number(process.env.PORT || 3001)
 
 const automation = createAutomationAdapter('simulation')
 
-app.use(helmet({ contentSecurityPolicy: false }))
+app.use(helmet({ contentSecurityPolicy: false, crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" } }))
 app.use(cors({origin:false}))
 app.use(express.json({ limit: '2mb' }))
 

@@ -26,19 +26,13 @@ npm run dev
 
 Le parcours complet est simulé : création du dossier, demande SMS, reprise après validation humaine, confirmation explicite du paiement et génération de l’état « certificat disponible ». Aucun paiement ni portail externe n’est utilisé.
 
-## Adaptateur ANCFCC
+## Dossier guidé et portail officiel
 
-L’adaptateur réel reste désactivé par défaut. Aucun champ, sélecteur ou API du portail n’est supposé.
+Dans le dossier guidé, scannez les deux faces de la CIN, vérifiez les champs proposés et renseignez les titres. Les corrections apportées à l’identité sont conservées dans le dossier enregistré.
 
-Pour une intégration ultérieure :
+Sur Safari, installez le favori **Remplir ANCFCC** depuis les instructions du dossier. Ouvrez le formulaire avec **Ouvrir et préremplir**, puis activez le favori sur la page officielle dans les dix minutes. Le transfert utilise un canal entre les deux onglets. Aucune donnée du dossier ne figure dans l’adresse du favori.
 
-1. Observer le parcours réel dans un environnement autorisé.
-2. Documenter les étapes, les sélecteurs stables et les événements humains.
-3. Configurer `ANCFCC_PORTAL_URL`.
-4. Passer `ANCFCC_AUTOMATION_MODE=configured`.
-5. Implémenter les étapes dans `server/automation.ts`.
-
-Ne jamais contourner les CAPTCHA, les protections ou les mécanismes de sécurité du portail.
+Le favori remplit le formulaire Particulier. Saisissez le CAPTCHA sur le portail et cochez les mentions légales après lecture. Le favori active alors **Suivant**. Si la case est déjà cochée, appuyez sur Entrée dans le champ du CAPTCHA. La suite du dossier reste dans le même onglet officiel. Les erreurs de validation s’affichent sur le portail.
 
 ## Sécurité
 

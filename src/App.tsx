@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { createWorker } from 'tesseract.js'
 import { api } from './api'
+import { readIdentity } from './identity'
 import GuidedRequest from './GuidedRequest'
 import type { Client, Demand, RequestStatus } from './types'
 
@@ -356,12 +357,10 @@ function ClientModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       const worker = await createWorker(['fra', 'ara'])
       const result = await worker.recognize(file).finally(()=>worker.terminate())
       const raw = result.data.text
-      const candidate = raw.match(/\b[A-Z]{1,2}\s*\d{5,8}\b/g)
-      if(candidate?.length===1) setCin(old=>old||candidate[0].replace(/\s/g,''))
-      const first = raw.match(/(?:Prénom|Prenom)\s*[:：]\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ '’-]+)(?=\n|$)/i)?.[1]?.trim()
-      const last = raw.match(/(?:^|\n)Nom\s*[:：]\s*([A-ZÀ-Ÿ][A-ZÀ-Ÿ '’-]+)(?=\n|$)/i)?.[1]?.trim()
-      if(first)setFirstName(old=>old||first)
-      if(last)setLastName(old=>old||last)
+      const fields = readIdentity(raw)
+      if(fields.cin)setCin(old=>old||fields.cin)
+      if(fields.first)setFirstName(old=>old||fields.first)
+      if(fields.last)setLastName(old=>old||fields.last)
       setOcrText((text) => `${text}${text ? '\n' : ''}${result.data.text}`)
     } catch (err) {
       setError('OCR indisponible. Vous pouvez saisir les informations manuellement.')

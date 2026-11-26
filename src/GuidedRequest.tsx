@@ -3,13 +3,15 @@ import { useState, useEffect } from 'react'
 import { supabase } from './session'
 import type { Client } from './types'
 
-const portal = 'https://www.ancfcc.gov.ma/certificatspage/'
+import PortalLaunch from './PortalLaunch'
+import { readIdentity } from './identity'
 type Title = { office: string; number: string; index: string; special: string }
-type Saved = {id:string;client_id:string;last_ar:string;first_ar:string;address:string;email:string;titles:Title[];step:number;cpp:string;updated_at:string}
+type Saved = {last_fr:string|null;first_fr:string|null;identity_number:string|null;id:string;client_id:string;last_ar:string;first_ar:string;address:string;email:string;titles:Title[];step:number;cpp:string;updated_at:string}
 const emptyTitle = (): Title => ({office:'',number:'',index:'',special:''})
 const steps = ['Préparer le formulaire','Vérifier les titres sur le portail','Valider le téléphone sur le portail','Payer sur la page bancaire','Conserver le reçu et le CPP','Attendre le SMS de disponibilité','Suivre et télécharger le certificat']
 export default function GuidedRequest({clients}:{clients:Client[]}) {
  const [clientId,setClientId]=useState('')
+ const [latin,setLatin]=useState({last:'',first:'',cin:''})
  const [lastAr,setLastAr]=useState('')
  const [firstAr,setFirstAr]=useState('')
  const [address,setAddress]=useState('')
@@ -30,13 +32,11 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
    const result=await worker.recognize(file).finally(()=>worker.terminate())
    const t=result.data.text
    setRaw(old=>old+'\n'+t)
-   const ar=(label:string)=>t.match(new RegExp('(?:^|\\n)(?:'+label+')\\s*[:：]\\s*([^\\n]+)'))?.[1]?.trim()
-   const last=ar('الاسم العائلي|النسب')
-   const first=ar('الاسم الشخصي')
-   const addr=ar('العنوان')
-   if(last)setLastAr(old=>old||last)
-   if(first)setFirstAr(old=>old||first)
-   if(addr)setAddress(old=>old||addr)
+   const fields=readIdentity(t)
+   setLatin(old=>({last:old.last||fields.last,first:old.first||fields.first,cin:old.cin||fields.cin}))
+   if(fields.lastAr)setLastAr(old=>old||fields.lastAr)
+   if(fields.firstAr)setFirstAr(old=>old||fields.firstAr)
+   if(fields.address)setAddress(old=>old||fields.address)
    setMessage('Vérifiez les suggestions OCR avant enregistrement.')
   }catch{setMessage('Lecture impossible. Réessayez avec une photo nette.')}finally{setScanBusy(false)}
  }
@@ -47,29 +47,32 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
   setSaved((data||[]) as Saved[])
  }
  useEffect(()=>{void load()},[])
- function openCase(d:Saved){setRaw('');setId(d.id);setClientId(d.client_id);setLastAr(d.last_ar);setFirstAr(d.first_ar);setAddress(d.address);setEmail(d.email);setTitles(d.titles.length?d.titles:[emptyTitle()]);setStep(d.step);setCpp(d.cpp);setMessage('Dossier chargé')}
- function reset(){setRaw('');setId('');setClientId('');setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setStep(0);setCpp('');setMessage('Nouveau dossier')}
+ function openCase(d:Saved){fillIdentity(d.client_id,d);setRaw('');setId(d.id);setClientId(d.client_id);setLastAr(d.last_ar);setFirstAr(d.first_ar);setAddress(d.address);setEmail(d.email);setTitles(d.titles.length?d.titles:[emptyTitle()]);setStep(d.step);setCpp(d.cpp);setMessage('Dossier chargé')}
+ function reset(){fillIdentity('');setRaw('');setId('');setClientId('');setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setStep(0);setCpp('');setMessage('Nouveau dossier')}
  async function save(){
   if(!supabase||!clientId||busy)return
   setBusy(true);setMessage('')
   try{
-   const payload={client_id:clientId,last_ar:lastAr,first_ar:firstAr,address,email,titles,step,cpp,updated_at:new Date().toISOString()}
+   const payload={client_id:clientId,last_fr:latin.last,first_fr:latin.first,identity_number:latin.cin,last_ar:lastAr,first_ar:firstAr,address,email,titles,step,cpp,updated_at:new Date().toISOString()}
    const result=id?await supabase.from('guided_cases').update(payload).eq('id',id).select().single():await supabase.from('guided_cases').insert(payload).select().single()
    if(result.error)throw result.error
    setId(result.data.id);await load();setMessage('Dossier enregistré')
   }catch{setMessage('Échec de la sauvegarde. Réessayez.')}finally{setBusy(false)}
  }
- const client=clients.find(c=>c.id===clientId)
+ function fillIdentity(value:string,snapshot?:Saved){
+  const c=clients.find(c=>c.id===value)
+  setLatin({last:snapshot?.last_fr??c?.lastName??'',first:snapshot?.first_fr??c?.firstName??'',cin:snapshot?.identity_number??c?.cin??''})
+ }
  const change=(i:number,key:keyof Title,value:string)=>setTitles(old=>old.map((t,j)=>i===j?{...t,[key]:value}:t))
  return <section className="space-y-5">
  <h1 className="text-2xl font-bold text-forest">Assistant ANCFCC — parcours guidé</h1>
- <p className="rounded-xl bg-amber-50 p-4 text-sm">Mode manuel assisté. Aucun envoi automatique, aucun paiement ni code SMS collecté. Enregistrez votre dossier avant de quitter. Les étapes sont déclaratives et non vérifiées par le portail.</p>
+ <p className="rounded-xl bg-amber-50 p-4 text-sm">Scannez la CIN recto verso, vérifiez les champs et renseignez les titres. Le favori remplit le formulaire dans votre navigateur. Vous pouvez aussi choisir un client pour enregistrer son dossier.</p>
  <div className="space-y-3 rounded-2xl bg-white p-5">
  <button disabled={busy||scanBusy} onClick={reset} className="rounded-lg border p-2">Nouveau dossier</button>
  <label>Dossiers enregistrés<select disabled={busy||scanBusy} className="input" value={id} onChange={e=>{const d=saved.find(x=>x.id===e.target.value);if(d)openCase(d);else reset()}}><option value="">Nouveau dossier</option>{saved.map(d=><option key={d.id} value={d.id}>{clients.find(c=>c.id===d.client_id)?.lastName||'Client'} · {d.titles.map(t=>t.number+'/'+t.index).join(', ')} · {new Date(d.updated_at).toLocaleDateString()}</option>)}</select></label>
- <label>Client<select className="input" value={clientId} disabled={scanBusy||busy} onChange={e=>{setRaw('');setId('');setClientId(e.target.value);setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setCpp('');setStep(0)}}><option value="">Choisir un client</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></label>
- {client&&<p>Nom : {client.lastName} · Prénom : {client.firstName} · CIN : {client.cin}</p>}
- <label>Scanner la CIN (recto puis verso)<input type="file" accept="image/*" capture="environment" disabled={scanBusy||busy||!clientId} onChange={e=>{const f=e.target.files?.[0];if(f)void scan(f)}}/></label>
+ <label>Client<select className="input" value={clientId} disabled={scanBusy||busy} onChange={e=>{setRaw('');setId('');setClientId(e.target.value);fillIdentity(e.target.value);setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setCpp('');setStep(0)}}><option value="">Choisir un client</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></label>
+ {([['last','Nom en français'],['first','Prénom en français'],['cin','Numéro de CIN']] as const).map(([key,label])=><label key={key}>{label}<input className="input" value={latin[key]} onChange={e=>setLatin({...latin,[key]:e.target.value})}/></label>)}
+ <label>Scanner la CIN (recto puis verso)<input type="file" accept="image/*" capture="environment" disabled={scanBusy||busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void scan(f)}}/></label>
  {scanBusy&&<p>Lecture bilingue en cours…</p>}
  {raw&&<label>Texte détecté — à vérifier<textarea className="input" dir="auto" value={raw} readOnly rows={5}/></label>}
  <label>Nom en arabe<input className="input" dir="rtl" value={lastAr} onChange={e=>setLastAr(e.target.value)}/></label>
@@ -87,7 +90,8 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
  </div>)}
  <button className="rounded-lg border p-3" onClick={()=>setTitles(old=>[...old,emptyTitle()])}>+ Ajouter un titre</button>
  <p className="text-xs text-slate-500">Indices FES ZOUAGHA relevés sur le portail. Pour les autres conservations, vérifier les valeurs officielles.</p>
- <a className="block rounded-xl bg-forest p-3 text-center text-white" href={portal} target="_blank" rel="noopener noreferrer">Ouvrir le formulaire officiel</a>
+ <PortalLaunch draft={{fields:{TextBoxNom:latin.last,TextBoxPrenom:latin.first,TextBoxIdentifiant:latin.cin,TextBoxNomAr:lastAr,TextBoxPrenomAr:firstAr,TextBoxAdresse:address,TextBoxEmail:email},titles}}/>
+ <a href="https://www.ancfcc.gov.ma/certificatspage/" target="_blank" rel="noopener noreferrer" className="underline">Ouvrir le portail en saisie manuelle</a>
  </div>
  <div className="space-y-3 rounded-2xl bg-white p-5"><h2 className="font-bold">Checklist manuelle (non vérifiée par ANCFCC)</h2>
  {steps.map((s,i)=><label key={s} className="flex items-center gap-3"><input type="checkbox" checked={i<step} disabled={i>step} onChange={()=>setStep(i<step?i:i+1)}/>{s}</label>)}
