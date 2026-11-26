@@ -1,7 +1,13 @@
+import { supabase } from './session'
 import type { Client, Demand } from './types'
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init)
+  const session = await supabase?.auth.getSession()
+  const token = session?.data.session?.access_token
+  if (!token) throw new Error('Connexion requise')
+  const headers = new Headers(init?.headers)
+  headers.set('Authorization', 'Bearer ' + token)
+  const response = await fetch(url, { ...init, headers, cache: 'no-store' })
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
     throw new Error(body.error || 'Une erreur est survenue')
