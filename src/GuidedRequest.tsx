@@ -1,3 +1,4 @@
+import { createWorker } from 'tesseract.js'
 import { useState, useEffect } from 'react'
 import { supabase } from './session'
 import type { Client } from './types'
@@ -5,7 +6,7 @@ import type { Client } from './types'
 const portal = 'https://www.ancfcc.gov.ma/certificatspage/'
 type Title = { office: string; number: string; index: string; special: string }
 type Saved = {id:string;client_id:string;last_ar:string;first_ar:string;address:string;email:string;titles:Title[];step:number;cpp:string;updated_at:string}
-const emptyTitle = (): Title => ({office:'FES ZOUAGHA',number:'',index:'69',special:''})
+const emptyTitle = (): Title => ({office:'',number:'',index:'',special:''})
 const steps = ['Préparer le formulaire','Vérifier les titres sur le portail','Valider le téléphone sur le portail','Payer sur la page bancaire','Conserver le reçu et le CPP','Attendre le SMS de disponibilité','Suivre et télécharger le certificat']
 export default function GuidedRequest({clients}:{clients:Client[]}) {
  const [clientId,setClientId]=useState('')
@@ -20,6 +21,25 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
  const [id,setId]=useState('')
  const [busy,setBusy]=useState(false)
  const [message,setMessage]=useState('')
+ const [scanBusy,setScanBusy]=useState(false)
+ const [raw,setRaw]=useState('')
+ async function scan(file:File){
+  setScanBusy(true)
+  try{
+   const worker=await createWorker(['fra','ara'])
+   const result=await worker.recognize(file).finally(()=>worker.terminate())
+   const t=result.data.text
+   setRaw(old=>old+'\n'+t)
+   const ar=(label:string)=>t.match(new RegExp('(?:^|\\n)(?:'+label+')\\s*[:：]\\s*([^\\n]+)'))?.[1]?.trim()
+   const last=ar('الاسم العائلي|النسب')
+   const first=ar('الاسم الشخصي')
+   const addr=ar('العنوان')
+   if(last)setLastAr(old=>old||last)
+   if(first)setFirstAr(old=>old||first)
+   if(addr)setAddress(old=>old||addr)
+   setMessage('Vérifiez les suggestions OCR avant enregistrement.')
+  }catch{setMessage('Lecture impossible. Réessayez avec une photo nette.')}finally{setScanBusy(false)}
+ }
  async function load() {
   if(!supabase)return
   const {data,error}=await supabase.from('guided_cases').select('*').order('updated_at',{ascending:false})
@@ -27,8 +47,8 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
   setSaved((data||[]) as Saved[])
  }
  useEffect(()=>{void load()},[])
- function openCase(d:Saved){setId(d.id);setClientId(d.client_id);setLastAr(d.last_ar);setFirstAr(d.first_ar);setAddress(d.address);setEmail(d.email);setTitles(d.titles.length?d.titles:[emptyTitle()]);setStep(d.step);setCpp(d.cpp);setMessage('Dossier chargé')}
- function reset(){setId('');setClientId('');setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setStep(0);setCpp('');setMessage('Nouveau dossier')}
+ function openCase(d:Saved){setRaw('');setId(d.id);setClientId(d.client_id);setLastAr(d.last_ar);setFirstAr(d.first_ar);setAddress(d.address);setEmail(d.email);setTitles(d.titles.length?d.titles:[emptyTitle()]);setStep(d.step);setCpp(d.cpp);setMessage('Dossier chargé')}
+ function reset(){setRaw('');setId('');setClientId('');setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setStep(0);setCpp('');setMessage('Nouveau dossier')}
  async function save(){
   if(!supabase||!clientId||busy)return
   setBusy(true);setMessage('')
@@ -45,10 +65,13 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
  <h1 className="text-2xl font-bold text-forest">Assistant ANCFCC — parcours guidé</h1>
  <p className="rounded-xl bg-amber-50 p-4 text-sm">Mode manuel assisté. Aucun envoi automatique, aucun paiement ni code SMS collecté. Enregistrez votre dossier avant de quitter. Les étapes sont déclaratives et non vérifiées par le portail.</p>
  <div className="space-y-3 rounded-2xl bg-white p-5">
- <button disabled={busy} onClick={reset} className="rounded-lg border p-2">Nouveau dossier</button>
- <label>Dossiers enregistrés<select disabled={busy} className="input" value={id} onChange={e=>{const d=saved.find(x=>x.id===e.target.value);if(d)openCase(d);else reset()}}><option value="">Nouveau dossier</option>{saved.map(d=><option key={d.id} value={d.id}>{clients.find(c=>c.id===d.client_id)?.lastName||'Client'} · {d.titles.map(t=>t.number+'/'+t.index).join(', ')} · {new Date(d.updated_at).toLocaleDateString()}</option>)}</select></label>
- <label>Client<select className="input" value={clientId} onChange={e=>{setId('');setClientId(e.target.value);setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setCpp('');setStep(0)}}><option value="">Choisir un client</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></label>
+ <button disabled={busy||scanBusy} onClick={reset} className="rounded-lg border p-2">Nouveau dossier</button>
+ <label>Dossiers enregistrés<select disabled={busy||scanBusy} className="input" value={id} onChange={e=>{const d=saved.find(x=>x.id===e.target.value);if(d)openCase(d);else reset()}}><option value="">Nouveau dossier</option>{saved.map(d=><option key={d.id} value={d.id}>{clients.find(c=>c.id===d.client_id)?.lastName||'Client'} · {d.titles.map(t=>t.number+'/'+t.index).join(', ')} · {new Date(d.updated_at).toLocaleDateString()}</option>)}</select></label>
+ <label>Client<select className="input" value={clientId} disabled={scanBusy||busy} onChange={e=>{setRaw('');setId('');setClientId(e.target.value);setLastAr('');setFirstAr('');setAddress('');setEmail('');setTitles([emptyTitle()]);setCpp('');setStep(0)}}><option value="">Choisir un client</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}</select></label>
  {client&&<p>Nom : {client.lastName} · Prénom : {client.firstName} · CIN : {client.cin}</p>}
+ <label>Scanner la CIN (recto puis verso)<input type="file" accept="image/*" capture="environment" disabled={scanBusy||busy||!clientId} onChange={e=>{const f=e.target.files?.[0];if(f)void scan(f)}}/></label>
+ {scanBusy&&<p>Lecture bilingue en cours…</p>}
+ {raw&&<label>Texte détecté — à vérifier<textarea className="input" dir="auto" value={raw} readOnly rows={5}/></label>}
  <label>Nom en arabe<input className="input" dir="rtl" value={lastAr} onChange={e=>setLastAr(e.target.value)}/></label>
  <label>Prénom en arabe<input className="input" dir="rtl" value={firstAr} onChange={e=>setFirstAr(e.target.value)}/></label>
  <label>Adresse<input className="input" value={address} onChange={e=>setAddress(e.target.value)}/></label>
@@ -70,7 +93,7 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
  {steps.map((s,i)=><label key={s} className="flex items-center gap-3"><input type="checkbox" checked={i<step} disabled={i>step} onChange={()=>setStep(i<step?i:i+1)}/>{s}</label>)}
  <label>Code de suivi CPP<input className="input" value={cpp} onChange={e=>setCpp(e.target.value)} autoComplete="off"/></label>
  <a href="https://www.ancfcc.gov.ma/" target="_blank" rel="noopener noreferrer" className="block text-forest underline">Portail officiel — rubrique Suivre</a>
- <button disabled={busy||!clientId} onClick={save} className="w-full rounded-xl bg-forest p-3 text-white disabled:opacity-50">{busy?'Enregistrement…':'Enregistrer le dossier'}</button>
+ <button disabled={busy||scanBusy||!clientId} onClick={save} className="w-full rounded-xl bg-forest p-3 text-white disabled:opacity-50">{busy?'Enregistrement…':'Enregistrer le dossier'}</button>
  <p role="status">{message}</p>
  </div></section>
 }
