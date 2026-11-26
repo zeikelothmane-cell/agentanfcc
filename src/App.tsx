@@ -6,9 +6,10 @@ import {
 } from 'lucide-react'
 import { createWorker } from 'tesseract.js'
 import { api } from './api'
+import GuidedRequest from './GuidedRequest'
 import type { Client, Demand, RequestStatus } from './types'
 
-type Section = 'dashboard' | 'clients' | 'demands' | 'documents' | 'finance'
+type Section = 'dashboard' | 'clients' | 'demands' | 'documents' | 'finance' | 'guided'
 
 const statusLabels: Record<RequestStatus, string> = {
   brouillon: 'Brouillon',
@@ -84,6 +85,7 @@ function App() {
     { id: 'dashboard' as const, label: 'Tableau de bord', icon: LayoutDashboard },
     { id: 'clients' as const, label: 'Clients', icon: Users },
     { id: 'demands' as const, label: 'Demandes', icon: FileText },
+    { id: 'guided' as const, label: 'Assistant ANCFCC', icon: ShieldCheck },
     { id: 'documents' as const, label: 'Documents', icon: FolderOpen },
     { id: 'finance' as const, label: 'Finances', icon: WalletCards }
   ]
@@ -136,6 +138,7 @@ function App() {
           {section === 'demands' && <DemandsSection demands={filteredDemands} loading={loading} onNew={() => setDemandModal(true)} onSms={setSmsModal} onPayment={setPaymentModal} />}
           {section === 'documents' && <DocumentsSection demands={demands} search={search} />}
           {section === 'finance' && <FinanceSection demands={demands} />}
+          {section === 'guided' && <GuidedRequest clients={clients} />}
         </div>
       </main>
 
