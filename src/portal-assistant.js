@@ -50,7 +50,7 @@
       const special = byId('DLLIndiceSpecial')
       if (title.special) await choose(special, title.special)
       else input(special, '')
-      const add = Array.from(document.links).find(a => a.textContent.includes('ajouter un titre foncier') && a.getBoundingClientRect().width)
+      const add = Array.from(document.querySelectorAll('a')).find(a => a.textContent.includes('ajouter un titre foncier') && a.getBoundingClientRect().width)
       if (!add) throw new Error('Bouton d’ajout introuvable sur le portail.')
       const count = rows().length
       add.click()
