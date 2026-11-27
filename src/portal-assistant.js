@@ -39,18 +39,22 @@
     await wait(() => byId('TextBoxNom')?.getBoundingClientRect().width, 'Formulaire particulier indisponible.')
     await choose(byId('DropDownTypeIdentite'), 'CIN')
     for (const [id, value] of Object.entries(data.fields)) input(byId(id), value)
+    const rows = () => Array.from(document.querySelectorAll('#documentTable tbody tr'))
+    if (rows().length) throw new Error('Des titres sont déjà ajoutés. Rouvrez un formulaire depuis le dossier pour éviter les doublons.')
+    if (new Set(data.titles.map(t => t.office)).size > 1) throw new Error('Le portail conserve une seule conservation par demande. Préparez un dossier par conservation.')
+    const office = byId('DropDownConservation')
+    await choose(office, data.titles[0].office)
     for (const [i, title] of data.titles.entries()) {
-      const field = (suffix, id) => document.getElementsByName('ListTitreFoncier[' + i + '].' + suffix)[0] || (i === 0 && byId(id))
-      if (i > 0) {
-        const add = Array.from(document.links).find(a => a.textContent.includes('ajouter un titre foncier') && a.getBoundingClientRect().width)
-        if (!add) throw new Error('Vérifiez les titres et ajoutez les titres restants sur le portail.')
-        add.click()
-      }
-      const office = await wait(() => field('SelectedConservationFonciereId', 'DropDownConservation'), 'Vérifiez les titres restants sur le portail.')
-      await choose(office, title.office)
-      input(field('Reference', 'TextBoxReference'), title.number)
-      await choose(field('SelectedIndiceId', 'DLLIndice'), title.index)
-      if (title.special) await choose(field('SelectedIndiceSpecialId', 'DLLIndiceSpecial'), title.special)
+      input(byId('TextBoxReference'), title.number)
+      await choose(byId('DLLIndice'), title.index)
+      const special = byId('DLLIndiceSpecial')
+      if (title.special) await choose(special, title.special)
+      else input(special, '')
+      const add = Array.from(document.links).find(a => a.textContent.includes('ajouter un titre foncier') && a.getBoundingClientRect().width)
+      if (!add) throw new Error('Bouton d’ajout introuvable sur le portail.')
+      const count = rows().length
+      add.click()
+      await wait(() => rows().length === count + 1, 'Titre ' + (i + 1) + ' non ajouté. Vérifiez le message du portail avant de continuer.')
     }
     const captcha = byId('TextBoxCapchaCode'), terms = byId('chkTerms'), next = byId('SWitchToNext')
     if (!captcha || !terms || !next) throw new Error('Vérifiez la fin du formulaire officiel.')
@@ -67,7 +71,7 @@
     captcha.scrollIntoView({block:'center'})
     const hint = document.createElement('p')
     hint.setAttribute('role', 'status')
-    hint.textContent = 'Saisissez le CAPTCHA puis acceptez les mentions légales pour continuer. Si elles sont déjà cochées, appuyez sur Entrée.'
+    hint.textContent = data.titles.length + ' titre(s) ajouté(s). Saisissez le CAPTCHA puis acceptez les mentions légales pour continuer. Si elles sont déjà cochées, appuyez sur Entrée.'
     captcha.parentElement.append(hint)
   } catch (error) { alert(error.message) }
 })()

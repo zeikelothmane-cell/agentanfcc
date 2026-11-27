@@ -46,6 +46,10 @@ export default function PortalLaunch({ draft }: { draft: Draft }) {
         return
       }
     }
+    if (new Set(titles.map(t => t.office)).size > 1) {
+      setNotice('Préparez un dossier par conservation. Le portail verrouille la conservation après le premier titre ajouté.')
+      return
+    }
     const tab = window.open(portal + '/certificatspage/', '_blank')
     if (!tab) { setNotice('Autorisez l’ouverture du formulaire dans un nouvel onglet.'); return }
     pending.current = { tab, draft: {...draft,titles}, expires: Date.now() + 600000 }
@@ -53,7 +57,7 @@ export default function PortalLaunch({ draft }: { draft: Draft }) {
   }
   return <div className="space-y-3">
     <details><summary>Installer le favori « Remplir ANCFCC » dans votre navigateur</summary>
-      <p>Une seule fois, ajoutez cette page aux favoris. Modifiez ce favori, nommez-le « Remplir ANCFCC » et remplacez son adresse par le code copié ci-dessous.</p>
+      <p>Pour activer l’ajout automatique de plusieurs titres, recopiez cette adresse dans votre favori existant. Une seule fois, ajoutez cette page aux favoris. Modifiez ce favori, nommez-le « Remplir ANCFCC » et remplacez son adresse par le code copié ci-dessous.</p>
       <button type="button" className="rounded-lg border p-2" onClick={async () => {
         try { await navigator.clipboard.writeText(favourite); setNotice('Adresse du favori copiée.') }
         catch { setShowCode(true) }
