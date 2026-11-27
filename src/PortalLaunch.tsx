@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { normalizeTitle, officeIndices } from './conservations'
 import assistant from './portal-assistant.js?raw'
 
 const portal = 'https://www.ancfcc.gov.ma'
@@ -30,9 +31,20 @@ export default function PortalLaunch({ draft }: { draft: Draft }) {
       setNotice('Complétez les noms français et arabes, la CIN, l’adresse, la conservation, le numéro et l’indice de chaque titre.')
       return
     }
+    const titles = draft.titles.map(normalizeTitle)
+    for (const [i,title] of titles.entries()) {
+      if (!Object.hasOwn(officeIndices,title.office)) {
+        setNotice(`Titre ${i+1} — choisissez une conservation dans la liste officielle.`)
+        return
+      }
+      if (!officeIndices[title.office].includes(title.index)) {
+        setNotice(`Titre ${i+1} — choisissez un indice proposé pour ${title.office}.`)
+        return
+      }
+    }
     const tab = window.open(portal + '/certificatspage/', '_blank')
     if (!tab) { setNotice('Autorisez l’ouverture du formulaire dans un nouvel onglet.'); return }
-    pending.current = { tab, draft, expires: Date.now() + 600000 }
+    pending.current = { tab, draft: {...draft,titles}, expires: Date.now() + 600000 }
     setNotice('Dans le nouvel onglet, touchez le favori « Remplir ANCFCC ».')
   }
   return <div className="space-y-3">

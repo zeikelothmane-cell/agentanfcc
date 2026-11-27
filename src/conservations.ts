@@ -84,3 +84,18 @@ export const officeIndices: Readonly<Record<string, readonly string[]>> = {
   "TIFELT": ["16", "20", "81", "K", "KR", "L", "R", "RL"],
   "TIZNIT": ["09", "31", "S"],
 }
+
+function officeKey(name: string) {
+  return name.normalize('NFD').replace(/\p{M}/gu, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
+}
+
+const officialNames = new Map(Object.keys(officeIndices).map(name => [officeKey(name), name]))
+officialNames.set('ZOUAGHA', 'FES ZOUAGHA')
+
+export function normalizeTitle<T extends { office: string; index: string }>(title: T) {
+  return {
+    ...title,
+    office: officialNames.get(officeKey(title.office)) ?? title.office,
+    index: title.index.trim().toUpperCase(),
+  }
+}

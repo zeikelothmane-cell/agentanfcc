@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './session'
 import type { Client } from './types'
 
-import { officeIndices } from './conservations'
+import { normalizeTitle, officeIndices } from './conservations'
 import PortalLaunch from './PortalLaunch'
 type Title = { office: string; number: string; index: string; special: string }
 type Saved = {last_fr:string|null;first_fr:string|null;identity_number:string|null;id:string;client_id:string;last_ar:string;first_ar:string;address:string;email:string;titles:Title[];step:number;cpp:string;updated_at:string}
@@ -31,7 +31,7 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
   setSaved((data||[]) as Saved[])
  }
  useEffect(()=>{void load()},[])
- function openCase(d:Saved){fillIdentity(d.client_id,d);setId(d.id);setClientId(d.client_id);setEmail(d.email);setTitles(d.titles.length?d.titles:[emptyTitle()]);setStep(d.step);setCpp(d.cpp);setMessage('Dossier chargé')}
+ function openCase(d:Saved){fillIdentity(d.client_id,d);setId(d.id);setClientId(d.client_id);setEmail(d.email);setTitles(d.titles.length?d.titles.map(normalizeTitle):[emptyTitle()]);setStep(d.step);setCpp(d.cpp);setMessage('Dossier chargé')}
  function reset(){fillIdentity('');setId('');setClientId('');setEmail('');setTitles([emptyTitle()]);setStep(0);setCpp('');setMessage('Nouveau dossier')}
  async function save(){
   if(!supabase||!clientId||busy)return
