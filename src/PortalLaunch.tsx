@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { normalizeTitle, officeIndices } from './conservations'
+import { normalizeTitle, officeIndices, officeSpecialIndices } from './conservations'
 import assistant from './portal-assistant.js?raw'
 
 const portal = 'https://www.ancfcc.gov.ma'
@@ -39,6 +39,10 @@ export default function PortalLaunch({ draft }: { draft: Draft }) {
       }
       if (!officeIndices[title.office].includes(title.index)) {
         setNotice(`Titre ${i+1} — choisissez un indice proposé pour ${title.office}.`)
+        return
+      }
+      if (title.special && !officeSpecialIndices[title.office].includes(title.special)) {
+        setNotice(`Titre ${i+1} — choisissez un indice spécial proposé pour ${title.office} ou « Aucun ».`)
         return
       }
     }

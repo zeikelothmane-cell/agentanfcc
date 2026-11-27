@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './session'
 import type { Client } from './types'
 
-import { normalizeTitle, officeIndices } from './conservations'
+import { normalizeTitle, officeIndices, officeSpecialIndices } from './conservations'
 import PortalLaunch from './PortalLaunch'
 type Title = { office: string; number: string; index: string; special: string }
 type Saved = {last_fr:string|null;first_fr:string|null;identity_number:string|null;id:string;client_id:string;last_ar:string;first_ar:string;address:string;email:string;titles:Title[];step:number;cpp:string;updated_at:string}
@@ -64,6 +64,7 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
  <div className="space-y-4 rounded-2xl bg-white p-5"><h2 className="font-bold">Titres fonciers</h2>
  {titles.map((t,i)=>{
  const indices=Object.hasOwn(officeIndices,t.office)?officeIndices[t.office]:[]
+ const specials=Object.hasOwn(officeSpecialIndices,t.office)?officeSpecialIndices[t.office]:[]
  return <div key={i} className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2">
  <label>Conservation foncière<select className="input" value={t.office} onChange={e=>{const office=e.target.value;setTitles(old=>old.map((row,j)=>j===i?{...row,office,index:'',special:''}:row))}}>
    <option value="">Choisir une conservation</option>
@@ -76,7 +77,7 @@ export default function GuidedRequest({clients}:{clients:Client[]}) {
    {t.index&&!indices.includes(t.index)&&<option value={t.index}>{t.index} (valeur enregistrée)</option>}
    {indices.map(value=><option key={value}>{value}</option>)}
  </select></label>
- <label>Indice spécial<select className="input" value={t.special} onChange={e=>change(i,'special',e.target.value)}><option value="">Aucun</option><option>BIS</option><option>TER</option></select></label>
+ <label>Indice spécial<select className="input" disabled={!t.office} value={t.special} onChange={e=>change(i,'special',e.target.value)}><option value="">Aucun</option>{t.special&&!specials.includes(t.special)&&<option value={t.special}>{t.special} (valeur enregistrée)</option>}{specials.map(value=><option key={value}>{value}</option>)}</select></label>
  {titles.length>1&&<button type="button" onClick={()=>setTitles(old=>old.filter((_,j)=>j!==i))}>Retirer ce titre</button>}
  </div>})}
  <button className="rounded-lg border p-3" onClick={()=>setTitles(old=>[...old,emptyTitle()])}>+ Ajouter un titre</button>
